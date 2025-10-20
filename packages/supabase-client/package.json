@@ -1,0 +1,6 @@
+{
+  "name": "@thoughts/supabase-client",
+  "version": "1.0.0",
+  "main": "src/client.ts",
+  "type": "module"
+}
