@@ -22,12 +22,13 @@ export function Navbar() {
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          
+          {/* Logo */}
           <div className="flex items-center gap-2">
             <PenLine className="h-6 w-6" />
             <span className="text-xl font-semibold tracking-tight">Thoughts</span>
           </div>
 
+          {/* Links */}
           <div className="hidden md:flex items-center gap-8">
             <a href="#sobre" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
               Sobre
@@ -43,6 +44,7 @@ export function Navbar() {
             </a>
           </div>
 
+          {/* Botões */}
           <div className="flex items-center gap-3">
             <button className="text-sm px-3 py-1.5 rounded-md hover:bg-gray-100 transition">
               Entrar
