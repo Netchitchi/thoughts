@@ -20,7 +20,7 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@thoughts/supabase-client/*": ["packages/supabase-client/src/*"] // <-- ADICIONA AQUI
+      "@thoughts/supabase-client/*": ["/packages/supabase-client/src/*"] // <-- ADICIONA AQUI
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

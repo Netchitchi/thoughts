@@ -2,6 +2,8 @@
 
 import { PenLine } from "lucide-react"
 import { useEffect, useState } from "react"
+import Login from "./login"
+import Link from "next/link"
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false)
@@ -47,10 +49,10 @@ export function Navbar() {
           {/* Botões */}
           <div className="flex items-center gap-3">
             <button className="text-sm px-3 py-1.5 rounded-md hover:bg-gray-100 transition">
-              Entrar
+              <Link href="/auth/login"> Entrar </Link>
             </button>
             <button className="hidden sm:inline-flex text-sm px-4 py-1.5 bg-black text-white rounded-md hover:bg-gray-800 transition">
-              Começar a escrever
+              <Link href="/auth/login"> Começar a escrever </Link>
             </button>
           </div>
         </div>
