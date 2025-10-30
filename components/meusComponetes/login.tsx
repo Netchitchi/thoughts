@@ -35,9 +35,9 @@ export default function Login() {
       });
       console.log(data)
 
+      if (error) throw error;
       router.push("/")
       router.refresh()
-      if (error) throw error;
     } catch (error) {
       setError(error instanceof Error ? error.message : "Ocorreu um erro");
     } finally{
