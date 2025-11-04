@@ -1,38 +1,45 @@
-"use client"
+"use client";
 
-import { PenLine } from "lucide-react"
-import { useEffect, useState } from "react"
-import Login from "./login"
-import Link from "next/link"
+import { PenLine } from "lucide-react";
+import { useEffect, useState } from "react";
+import Login from "./login";
+import Link from "next/link";
 
 export function Navbar() {
-  const [scrolled, setScrolled] = useState(false)
+  const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => {
-      setScrolled(window.scrollY > 20)
-    }
-    window.addEventListener("scroll", handleScroll)
-    return () => window.removeEventListener("scroll", handleScroll)
-  }, [])
+      setScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
     <nav
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled ? "bg-background/80 backdrop-blur-md border-b border-border" : "bg-transparent"
+        scrolled
+          ? "bg-background/80 backdrop-blur-md border-b border-border"
+          : "bg-transparent"
       }`}
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <div className="flex items-center gap-2">
-            <PenLine className="h-6 w-6" />
-            <span className="text-xl font-semibold tracking-tight">Thoughts</span>
-          </div>
+          <Link href="/">
+            <div className="flex items-center gap-2">
+              <PenLine className="h-6 w-6" />
+              <span className="text-xl font-semibold tracking-tight"> Thoughts</span>
+            </div>
+          </Link>
 
           {/* Links */}
           <div className="hidden md:flex items-center gap-8">
-            <a href="#sobre" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <a
+              href="#sobre"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
               Sobre
             </a>
             <a
@@ -41,7 +48,10 @@ export function Navbar() {
             >
               Funcionalidades
             </a>
-            <a href="#comunidade" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <a
+              href="#comunidade"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
               Comunidade
             </a>
           </div>
@@ -58,5 +68,5 @@ export function Navbar() {
         </div>
       </div>
     </nav>
-  )
+  );
 }
