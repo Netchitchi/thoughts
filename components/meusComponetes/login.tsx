@@ -36,7 +36,7 @@ export default function Login() {
       console.log(data)
 
       if (error) throw error;
-      router.push("/")
+      router.push("/feed")
       router.refresh()
     } catch (error) {
       setError(error instanceof Error ? error.message : "Ocorreu um erro");
