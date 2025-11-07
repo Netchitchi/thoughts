@@ -37,7 +37,7 @@ export default function Login() {
 
       if (error) throw error;
       router.push("/feed")
-      router.refresh()
+      await supabase.auth.refreshSession()
     } catch (error) {
       setError(error instanceof Error ? error.message : "Ocorreu um erro");
     } finally{
