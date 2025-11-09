@@ -1,189 +1,227 @@
 "use client"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Heart, Bookmark, MessageCircle } from "lucide-react"
+
 import { AuthenticatedNavbar } from "@/components/meusComponetes/authenticatednavbar"
+import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { supabase } from "@/packages/supabase-client"
+import { Eye, Heart } from "lucide-react"
 
 interface Category {
   id: string
   name: string
-  slug: string
+  description: string | null
+  created_at: string
 }
 
 interface Post {
-  id: string
+  article_id: string
   title: string
-  excerpt: string
-  cover_image: string | null
+  summary: string
   created_at: string
-  views: number
-  author: {
-    display_name: string
-    avatar_url: string | null
-  }
-  category: {
-    name: string
-    slug: string
-  } | null
+  views_count: number
   likes_count: number
-  comments_count: number
+  users: {
+    name: string
+    avatar_url: string | null
+  }[]
+  categories: {
+    name: string
+  }[]
 }
 
 export default function FeedPage() {
-  const [categories, setCategories] = useState<Category[]>([])
   const [posts, setPosts] = useState<Post[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    loadData()
+    fetchCategories()
+  }, [])
+
+  useEffect(() => {
+    fetchPosts()
   }, [selectedCategory])
 
-  const loadData = async () => {
-    try {
-      const { data: categoriesData } = await supabase.from("categories").select("*").order("name")
-      setCategories(categoriesData || [])
+  //  Buscar categorias
+  const fetchCategories = async () => {
+    const { data, error } = await supabase
+      .from("categories")
+      .select("id, name, description, created_at")
 
-      let query = supabase
-        .from("posts")
-        .select(
-          `
-          id,
-          title,
-          excerpt,
-          cover_image,
-          created_at,
-          views,
-          author:profiles!posts_author_id_fkey(display_name, avatar_url),
-          category:categories(name, slug),
-          likes:likes(count),
-          comments:comments(count)
-        `
-        )
-        .eq("published", true)
-        .order("created_at", { ascending: false })
-
-      if (selectedCategory) {
-        query = query.eq("category_id", selectedCategory)
-      }
-
-      const { data: postsData } = await query
-
-      const formattedPosts =
-        postsData?.map((post: any) => ({
-          ...post,
-          author: Array.isArray(post.author) ? post.author[0] : post.author,
-          likes_count: post.likes?.[0]?.count || 0,
-          comments_count: post.comments?.[0]?.count || 0,
-        })) || []
-
-      setPosts(formattedPosts)
-    } catch (error) {
-      console.error("[Error loading feed]:", error)
-    } finally {
-      setIsLoading(false)
+    if (error) {
+      console.error(" Erro ao buscar categorias:", error)
+    } else {
+      setCategories(data ?? [])
     }
   }
 
+  //  Buscar artigos
+  //  Buscar artigos (versão robusta)
+//  Buscar artigos (versão final corrigida)
+const fetchPosts = async () => {
+  try {
+    setIsLoading(true)
+
+    //  Usa aliases "author" e "category" para evitar conflitos no Supabase
+    let query = supabase
+      .from("articles")
+      .select(`
+        article_id,
+        title,
+        summary,
+        created_at,
+        views_count,
+        likes_count,
+        author:author_id (
+          name,
+          avatar_url
+        ),
+        category:categories_id (
+          name
+        )
+      `)
+      .order("created_at", { ascending: false })
+
+    // Filtro de categoria
+    if (selectedCategory) {
+      query = query.eq("categories_id", selectedCategory)
+    }
+
+    const { data, error } = await query
+
+    // caso tivermos erro no  Supabase
+    if (error) {
+      console.error(" Erro ao buscar posts:", error.message || error)
+      setPosts([])
+      return
+    }
+
+    if (!data || data.length === 0) {
+      console.log(" Nenhum post encontrado.")
+      setPosts([])
+      return
+    }
+
+    //  Mapeia os dados para o formato correto
+    const formattedPosts: Post[] = data.map((post: any) => ({
+      article_id: post.article_id,
+      title: post.title ?? "Sem título",
+      summary: post.summary ?? "",
+      created_at: post.created_at,
+      views_count: post.views_count ?? 0,
+      likes_count: post.likes_count ?? 0,
+      users: post.author
+        ? [{ name: post.author.name, avatar_url: post.author.avatar_url }]
+        : [{ name: "Autor desconhecido", avatar_url: null }],
+      categories: post.category
+        ? [{ name: post.category.name }]
+        : [{ name: "Sem categoria" }],
+    }))
+
+    console.log(" Posts carregados:", formattedPosts)
+    setPosts(formattedPosts)
+  } catch (err) {
+    console.error(" Erro inesperado ao buscar posts:", err)
+    setPosts([])
+  } finally {
+    setIsLoading(false)
+  }
+}
+
+
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
-    const now = new Date()
-    const diffInMs = now.getTime() - date.getTime()
-    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24))
-
-    if (diffInDays === 0) return "Hoje"
-    if (diffInDays === 1) return "Ontem"
-    if (diffInDays < 7) return `Há ${diffInDays} dias`
-    return date.toLocaleDateString("pt-PT", { day: "numeric", month: "short" })
+    return date.toLocaleDateString("pt-PT", {
+      day: "numeric",
+      month: "short",
+    })
   }
 
   return (
     <div className="min-h-screen bg-background">
       <AuthenticatedNavbar />
 
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 overflow-x-auto pb-2">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-4xl">
+
+        {/*  Filtro de categorias */}
+        <div className="flex flex-wrap gap-2 mb-8 justify-center">
+          <Badge
+            onClick={() => setSelectedCategory(null)}
+            className={`cursor-pointer ${!selectedCategory ? "bg-primary text-white" : ""}`}
+          >
+            Todos
+          </Badge>
+
+          {categories.map((cat) => (
             <Badge
-              variant={selectedCategory === null ? "default" : "outline"}
-              className="cursor-pointer whitespace-nowrap"
-              onClick={() => setSelectedCategory(null)}
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`cursor-pointer ${selectedCategory === cat.id ? "bg-primary text-white" : ""}`}
             >
-              Todos
+              {cat.name}
             </Badge>
-            {categories.map((category) => (
-              <Badge
-                key={category.id}
-                variant={selectedCategory === category.id ? "default" : "outline"}
-                className="cursor-pointer whitespace-nowrap"
-                onClick={() => setSelectedCategory(category.id)}
-              >
-                {category.name}
-              </Badge>
-            ))}
-          </div>
+          ))}
         </div>
 
+        {/* Lista de artigos */}
         {isLoading ? (
-          <div className="flex justify-center py-12">
-            <div className="text-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
-              <p className="text-muted-foreground">Carregando posts...</p>
-            </div>
-          </div>
+          <div className="text-center text-muted-foreground">Carregando posts...</div>
         ) : posts.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Nenhum post encontrado nesta categoria.</p>
-          </div>
+          <div className="text-center text-muted-foreground">Nenhum post encontrado</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="flex flex-col divide-y divide-border">
             {posts.map((post) => (
-              <Link key={post.id} href={`/post/${post.id}`}>
-                <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer h-full">
-                  {post.cover_image && (
-                    <div className="aspect-video w-full overflow-hidden bg-muted">
-                      <img
-                        src={post.cover_image || "/placeholder.svg"}
-                        alt={post.title}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      />
-                    </div>
-                  )}
-                  <div className="p-5">
-                    {post.category && (
-                      <Badge variant="secondary" className="mb-3">
-                        {post.category.name}
+              <Link
+                key={post.article_id}
+                href={`/post/${post.article_id}`}
+                className="flex flex-col sm:flex-row justify-between items-start gap-6 py-8 hover:bg-muted/20 transition rounded-xl px-4"
+              >
+                {/* coluna esquerda com conteúdo */}
+                <div className="flex-1">
+                  {/* coloca o autor e data  de criação*/}
+                  <div className="flex items-center gap-2 mb-2">
+                    <img
+                      src={post.users?.[0]?.avatar_url || "/placeholder.svg"}
+                      alt={post.users?.[0]?.name || "Autor"}
+                      className="w-6 h-6 rounded-full"
+                    />
+                    <span className="text-sm font-medium">
+                      {post.users?.[0]?.name || "Autor desconhecido"}
+                    </span>
+                    <span className="text-muted-foreground text-xs">
+                      · {formatDate(post.created_at)}
+                    </span>
+                  </div>
+
+                  {/* Título e Resumo */}
+                  <h3 className="text-xl font-semibold mb-1 line-clamp-2">
+                    {post.title}
+                  </h3>
+
+                  <p className="text-muted-foreground text-sm line-clamp-3 mb-3">
+                    {post.summary}
+                  </p>
+
+                  {/* Categoria + Contadores */}
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    {post.categories?.[0] && (
+                      <Badge variant="secondary">
+                        {post.categories[0].name}
                       </Badge>
                     )}
-                    <h3 className="text-xl font-semibold mb-2 line-clamp-2">{post.title}</h3>
-                    <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{post.excerpt}</p>
-
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{post.author.display_name}</span>
-                        <span>·</span>
-                        <span>{formatDate(post.created_at)}</span>
-                      </div>
+                    <div className="flex items-center gap-1">
+                      <Eye className="w-4 h-4" />
+                      {post.views_count}
                     </div>
-
-                    <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Heart className="h-4 w-4" />
-                        <span>{post.likes_count}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MessageCircle className="h-4 w-4" />
-                        <span>{post.comments_count}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Bookmark className="h-4 w-4" />
-                      </div>
+                    <div className="flex items-center gap-1">
+                      <Heart className="w-4 h-4" />
+                      {post.likes_count}
                     </div>
                   </div>
-                </Card>
+                </div>
               </Link>
             ))}
           </div>
