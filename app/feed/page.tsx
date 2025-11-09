@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { supabase } from "@/packages/supabase-client"
-import { Eye, Heart } from "lucide-react"
+import { Eye, Heart, Bookmark } from "lucide-react"
 
 interface Category {
   id: string
@@ -35,6 +35,7 @@ export default function FeedPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [savedPosts, setSavedPosts] = useState<string[]>([]) // 🔖 IDs dos posts guardados
 
   useEffect(() => {
     fetchCategories()
@@ -44,94 +45,152 @@ export default function FeedPage() {
     fetchPosts()
   }, [selectedCategory])
 
-  //  Buscar categorias
+  useEffect(() => {
+    fetchBookmarks()
+  }, [])
+
+  // 🧠 Buscar categorias
   const fetchCategories = async () => {
     const { data, error } = await supabase
       .from("categories")
       .select("id, name, description, created_at")
 
     if (error) {
-      console.error(" Erro ao buscar categorias:", error)
+      console.error("Erro ao buscar categorias:", error)
     } else {
       setCategories(data ?? [])
     }
   }
 
-  //  Buscar artigos
-  //  Buscar artigos (versão robusta)
-//  Buscar artigos (versão final corrigida)
-const fetchPosts = async () => {
-  try {
-    setIsLoading(true)
+  // 🧠 Buscar artigos
+  const fetchPosts = async () => {
+    try {
+      setIsLoading(true)
 
-    //  Usa aliases "author" e "category" para evitar conflitos no Supabase
-    let query = supabase
-      .from("articles")
-      .select(`
-        article_id,
-        title,
-        summary,
-        created_at,
-        views_count,
-        likes_count,
-        author:author_id (
-          name,
-          avatar_url
-        ),
-        category:categories_id (
-          name
-        )
-      `)
-      .order("created_at", { ascending: false })
+      let query = supabase
+        .from("articles")
+        .select(`
+          article_id,
+          title,
+          summary,
+          created_at,
+          views_count,
+          likes_count,
+          author:author_id (
+            name,
+            avatar_url
+          ),
+          category:categories_id (
+            name
+          )
+        `)
+        .order("created_at", { ascending: false })
 
-    // Filtro de categoria
-    if (selectedCategory) {
-      query = query.eq("categories_id", selectedCategory)
-    }
+      if (selectedCategory) {
+        query = query.eq("categories_id", selectedCategory)
+      }
 
-    const { data, error } = await query
+      const { data, error } = await query
 
-    // caso tivermos erro no  Supabase
-    if (error) {
-      console.error(" Erro ao buscar posts:", error.message || error)
+      if (error) {
+        console.error("Erro ao buscar posts:", error.message || error)
+        setPosts([])
+        return
+      }
+
+      if (!data || data.length === 0) {
+        setPosts([])
+        return
+      }
+
+      const formattedPosts: Post[] = data.map((post: any) => ({
+        article_id: post.article_id,
+        title: post.title ?? "Sem título",
+        summary: post.summary ?? "",
+        created_at: post.created_at,
+        views_count: post.views_count ?? 0,
+        likes_count: post.likes_count ?? 0,
+        users: post.author
+          ? [{ name: post.author.name, avatar_url: post.author.avatar_url }]
+          : [{ name: "Autor desconhecido", avatar_url: null }],
+        categories: post.category
+          ? [{ name: post.category.name }]
+          : [{ name: "Sem categoria" }],
+      }))
+
+      setPosts(formattedPosts)
+    } catch (err) {
+      console.error("Erro inesperado ao buscar posts:", err)
       setPosts([])
-      return
+    } finally {
+      setIsLoading(false)
     }
-
-    if (!data || data.length === 0) {
-      console.log(" Nenhum post encontrado.")
-      setPosts([])
-      return
-    }
-
-    //  Mapeia os dados para o formato correto
-    const formattedPosts: Post[] = data.map((post: any) => ({
-      article_id: post.article_id,
-      title: post.title ?? "Sem título",
-      summary: post.summary ?? "",
-      created_at: post.created_at,
-      views_count: post.views_count ?? 0,
-      likes_count: post.likes_count ?? 0,
-      users: post.author
-        ? [{ name: post.author.name, avatar_url: post.author.avatar_url }]
-        : [{ name: "Autor desconhecido", avatar_url: null }],
-      categories: post.category
-        ? [{ name: post.category.name }]
-        : [{ name: "Sem categoria" }],
-    }))
-
-    console.log(" Posts carregados:", formattedPosts)
-    setPosts(formattedPosts)
-  } catch (err) {
-    console.error(" Erro inesperado ao buscar posts:", err)
-    setPosts([])
-  } finally {
-    setIsLoading(false)
   }
-}
 
+  // 🔖 Buscar posts salvos do usuário
+  const fetchBookmarks = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
+    if (!user) return
 
+    const { data, error } = await supabase
+      .from("bookmarks")
+      .select("article_id")
+      .eq("user_id", user.id)
+
+    if (error) {
+      console.error("Erro ao buscar bookmarks:", error)
+      return
+    }
+
+    if (data) {
+      setSavedPosts(data.map((b) => b.article_id))
+    }
+  }
+
+  // 🔖 Alternar guardar/remover post
+  const toggleBookmark = async (articleId: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      alert("É preciso fazer login para guardar um post.")
+      return
+    }
+
+    const isSaved = savedPosts.includes(articleId)
+
+    if (isSaved) {
+      // Apagar
+      const { error } = await supabase
+        .from("bookmarks")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("article_id", articleId)
+
+      if (error) {
+        console.error("Erro ao remover dos guardados:", error)
+      } else {
+        setSavedPosts(savedPosts.filter((id) => id !== articleId))
+      }
+    } else {
+      // Inserir
+      const { error } = await supabase
+        .from("bookmarks")
+        .insert([{ user_id: user.id, article_id: articleId }])
+
+      if (error) {
+        console.error("Erro ao guardar post:", error)
+      } else {
+        setSavedPosts([...savedPosts, articleId])
+      }
+    }
+  }
+
+  // 📅 Formatar data
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString("pt-PT", {
@@ -145,8 +204,7 @@ const fetchPosts = async () => {
       <AuthenticatedNavbar />
 
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-4xl">
-
-        {/*  Filtro de categorias */}
+        {/* 🔹 Filtro de categorias */}
         <div className="flex flex-wrap gap-2 mb-8 justify-center">
           <Badge
             onClick={() => setSelectedCategory(null)}
@@ -159,29 +217,32 @@ const fetchPosts = async () => {
             <Badge
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
-              className={`cursor-pointer ${selectedCategory === cat.id ? "bg-primary text-white" : ""}`}
+              className={`cursor-pointer ${
+                selectedCategory === cat.id ? "bg-primary text-white" : ""
+              }`}
             >
               {cat.name}
             </Badge>
           ))}
         </div>
 
-        {/* Lista de artigos */}
+        {/* 🔹 Lista de artigos */}
         {isLoading ? (
-          <div className="text-center text-muted-foreground">Carregando posts...</div>
+          <div className="text-center text-muted-foreground">
+            Carregando posts...
+          </div>
         ) : posts.length === 0 ? (
-          <div className="text-center text-muted-foreground">Nenhum post encontrado</div>
+          <div className="text-center text-muted-foreground">
+            Nenhum post encontrado
+          </div>
         ) : (
           <div className="flex flex-col divide-y divide-border">
             {posts.map((post) => (
-              <Link
+              <div
                 key={post.article_id}
-                href={`/post/${post.article_id}`}
                 className="flex flex-col sm:flex-row justify-between items-start gap-6 py-8 hover:bg-muted/20 transition rounded-xl px-4"
               >
-                {/* coluna esquerda com conteúdo */}
-                <div className="flex-1">
-                  {/* coloca o autor e data  de criação*/}
+                <Link href={`/post/${post.article_id}`} className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <img
                       src={post.users?.[0]?.avatar_url || "/placeholder.svg"}
@@ -196,7 +257,6 @@ const fetchPosts = async () => {
                     </span>
                   </div>
 
-                  {/* Título e Resumo */}
                   <h3 className="text-xl font-semibold mb-1 line-clamp-2">
                     {post.title}
                   </h3>
@@ -205,7 +265,6 @@ const fetchPosts = async () => {
                     {post.summary}
                   </p>
 
-                  {/* Categoria + Contadores */}
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     {post.categories?.[0] && (
                       <Badge variant="secondary">
@@ -221,8 +280,30 @@ const fetchPosts = async () => {
                       {post.likes_count}
                     </div>
                   </div>
-                </div>
-              </Link>
+                </Link>
+
+                {/* 🔖 Botão de guardar/remover */}
+                <button
+                  onClick={async (e) => {
+                    e.preventDefault()
+                    await toggleBookmark(post.article_id)
+                  }}
+                  className={`flex items-center gap-1 border rounded-md px-3 py-1 text-sm transition ${
+                    savedPosts.includes(post.article_id)
+                      ? "bg-primary text-white"
+                      : "hover:bg-primary hover:text-white"
+                  }`}
+                >
+                  <Bookmark
+                    className={`w-4 h-4 ${
+                      savedPosts.includes(post.article_id)
+                        ? "fill-white"
+                        : "fill-none"
+                    }`}
+                  />
+                  {savedPosts.includes(post.article_id) ? "Guardado" : "Guardar"}
+                </button>
+              </div>
             ))}
           </div>
         )}

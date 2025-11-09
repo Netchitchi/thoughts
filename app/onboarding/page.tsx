@@ -80,7 +80,7 @@ export default function Onboarding(){
 
       router.push("/feed")
     } catch (error) {
-      console.error("[v0] Error saving interests:", error)
+      console.error(" Error saving interests:", error)
       setError("Erro ao salvar interesses. Tente novamente.")
     } finally {
       setIsSaving(false)
