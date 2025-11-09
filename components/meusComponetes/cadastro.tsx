@@ -54,7 +54,7 @@ export default function Cadastro() {
           data: {
             name: name,
             email: email,
-            bio: "Novo escrito",
+            bio: "Novo escritor",
             avatar_url:
               "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJsdWNpZGUgbHVjaWRlLXVzZXItcm91bmQtaWNvbiBsdWNpZGUtdXNlci1yb3VuZCI+PGNpcmNsZSBjeD0iMTIiIGN5PSI4IiByPSI1Ii8+PHBhdGggZD0iTTIwIDIxYTggOCAwIDAgMC0xNiAwIi8+PC9zdmc+",
           },
@@ -64,27 +64,13 @@ export default function Cadastro() {
       if (error) throw error
       
       console.log(data);
-      router.push("/auth/check-email");
+      router.push("/onboarding");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "Ocorreu um erro");
     } finally {
       setIsLoading(false);
     }
 
-    // const hashedPassword = await bcrypt.hash(password_hash, 10);
-
-    // const { data, error } = await supabase
-    //   .from("users")
-    //   .insert([{ name,email, password_hash: hashedPassword }])
-    //   .select();
-
-    // if (error) {
-    //   console.error(error);
-    //   alert("Erro ao criar conta");
-    //   return;
-    // }
-
-    // console.log("Usuário criado:", data);
   };
 
   return (
