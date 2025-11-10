@@ -1,194 +1,418 @@
 "use client"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Heart, Bookmark, MessageCircle } from "lucide-react"
+
 import { AuthenticatedNavbar } from "@/components/meusComponetes/authenticatednavbar"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import Link from "next/link"
 import { useEffect, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { supabase } from "@/packages/supabase-client"
+import { Eye, Heart, Bookmark } from "lucide-react"
 
 interface Category {
   id: string
   name: string
-  slug: string
 }
 
 interface Post {
-  id: string
+  article_id: string
   title: string
-  excerpt: string
-  cover_image: string | null
+  summary: string
   created_at: string
-  views: number
-  author: {
-    display_name: string
-    avatar_url: string | null
-  }
-  category: {
-    name: string
-    slug: string
-  } | null
+  views_count: number
   likes_count: number
-  comments_count: number
+  cover_url: string | null
+  users: {
+    name: string
+    avatar_url: string | null
+  }[]
+  categories: {
+    name: string
+  }[]
 }
 
 export default function FeedPage() {
-  const [categories, setCategories] = useState<Category[]>([])
   const [posts, setPosts] = useState<Post[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [savedPosts, setSavedPosts] = useState<string[]>([])
+  const [activeTab, setActiveTab] = useState("foryou") // começa no "For You"
+  const [interests, setInterests] = useState<string[]>([])
+  const searchParams = useSearchParams()
+
+  // Detectar query param (ex: ?tab=featured)
+  useEffect(() => {
+    const tab = searchParams.get("tab")
+    if (tab === "featured" || tab === "foryou") {
+      setActiveTab(tab)
+    }
+  }, [searchParams])
 
   useEffect(() => {
-    loadData()
-  }, [selectedCategory])
+    fetchCategories()
+    fetchBookmarks()
+    fetchUserInterests()
+  }, [])
 
-  const loadData = async () => {
+  useEffect(() => {
+    fetchPosts()
+  }, [selectedCategory, activeTab, interests])
+
+  // Buscar categorias
+  const fetchCategories = async () => {
+    const { data, error } = await supabase
+      .from("categories")
+      .select("id, name")
+      .order("name")
+    if (error) console.error("Erro ao buscar categorias:", error)
+    else setCategories(data ?? [])
+  }
+
+  // Buscar interesses do usuário
+  const fetchUserInterests = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+
+    const { data, error } = await supabase
+      .from("user_interests")
+      .select("category_id")
+      .eq("user_id", user.id)
+
+    if (error) console.error("Erro ao buscar interesses:", error)
+    else setInterests(data.map((i) => i.category_id))
+  }
+
+  // Buscar artigos
+  const fetchPosts = async () => {
     try {
-      const { data: categoriesData } = await supabase.from("categories").select("*").order("name")
-      setCategories(categoriesData || [])
+      setIsLoading(true)
 
       let query = supabase
-        .from("posts")
-        .select(
-          `
-          id,
+        .from("articles")
+        .select(`
+          article_id,
           title,
-          excerpt,
-          cover_image,
+          summary,
           created_at,
-          views,
-          author:profiles!posts_author_id_fkey(display_name, avatar_url),
-          category:categories(name, slug),
-          likes:likes(count),
-          comments:comments(count)
-        `
-        )
-        .eq("published", true)
-        .order("created_at", { ascending: false })
+          views_count,
+          likes_count,
+          cover_url,
+          author:users!articles_author_id_fkey(name, avatar_url),
+          category:categories(name, id)
+        `)
 
-      if (selectedCategory) {
-        query = query.eq("category_id", selectedCategory)
+      // Aba "For You": filtrar pelos interesses do usuário
+      if (activeTab === "foryou") {
+        if (interests.length > 0) {
+          query = query
+            .in("categories_id", interests)
+            .order("created_at", { ascending: false })
+        } else {
+          setPosts([])
+          setIsLoading(false)
+          return
+        }
       }
 
-      const { data: postsData } = await query
+      // Aba "Em Destaque": ordenar por mais curtidos
+      if (activeTab === "featured") {
+        query = query.order("likes_count", { ascending: false })
+        if (selectedCategory) {
+          query = query.eq("categories_id", selectedCategory)
+        }
+      }
 
-      const formattedPosts =
-        postsData?.map((post: any) => ({
-          ...post,
-          author: Array.isArray(post.author) ? post.author[0] : post.author,
-          likes_count: post.likes?.[0]?.count || 0,
-          comments_count: post.comments?.[0]?.count || 0,
-        })) || []
+      const { data, error } = await query
+
+      if (error) {
+        console.error("Erro ao buscar posts:", error)
+        setPosts([])
+        return
+      }
+
+      if (!data || data.length === 0) {
+        setPosts([])
+        return
+      }
+
+      const formattedPosts: Post[] = data.map((post: any) => ({
+        article_id: post.article_id,
+        title: post.title ?? "Sem título",
+        summary: post.summary ?? "",
+        created_at: post.created_at,
+        views_count: post.views_count ?? 0,
+        likes_count: post.likes_count ?? 0,
+        cover_url: post.cover_url ?? null,
+        users: post.author
+          ? [{ name: post.author.name, avatar_url: post.author.avatar_url }]
+          : [{ name: "Autor desconhecido", avatar_url: null }],
+        categories: post.category
+          ? [{ name: post.category.name }]
+          : [{ name: "Sem categoria" }],
+      }))
 
       setPosts(formattedPosts)
-    } catch (error) {
-      console.error("[Error loading feed]:", error)
+    } catch (err) {
+      console.error("Erro inesperado ao buscar posts:", err)
+      setPosts([])
     } finally {
       setIsLoading(false)
     }
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInMs = now.getTime() - date.getTime()
-    const diffInDays = Math.floor(diffInMs / (1000 * 60 * 60 * 24))
+  // Buscar posts salvos
+  const fetchBookmarks = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
 
-    if (diffInDays === 0) return "Hoje"
-    if (diffInDays === 1) return "Ontem"
-    if (diffInDays < 7) return `Há ${diffInDays} dias`
-    return date.toLocaleDateString("pt-PT", { day: "numeric", month: "short" })
+    const { data, error } = await supabase
+      .from("bookmarks")
+      .select("article_id")
+      .eq("user_id", user.id)
+
+    if (error) console.error("Erro ao buscar bookmarks:", error)
+    else setSavedPosts(data.map((b) => b.article_id))
   }
+
+  // Alternar salvar/remover post
+  const toggleBookmark = async (articleId: string) => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      alert("É preciso fazer login para guardar um post.")
+      return
+    }
+
+    const isSaved = savedPosts.includes(articleId)
+
+    if (isSaved) {
+      const { error } = await supabase
+        .from("bookmarks")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("article_id", articleId)
+
+      if (!error) setSavedPosts(savedPosts.filter((id) => id !== articleId))
+    } else {
+      const { error } = await supabase
+        .from("bookmarks")
+        .insert([{ user_id: user.id, article_id: articleId }])
+
+      if (!error) setSavedPosts([...savedPosts, articleId])
+    }
+  }
+
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("pt-PT", {
+      day: "numeric",
+      month: "short",
+    })
 
   return (
     <div className="min-h-screen bg-background">
       <AuthenticatedNavbar />
 
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center gap-3 overflow-x-auto pb-2">
-            <Badge
-              variant={selectedCategory === null ? "default" : "outline"}
-              className="cursor-pointer whitespace-nowrap"
-              onClick={() => setSelectedCategory(null)}
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-4xl">
+        {/* Tabs principais */}
+        <Tabs
+          defaultValue="foryou"
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="mb-6"
+        >
+          <TabsList className="flex justify-center bg-muted rounded-lg p-1">
+            <TabsTrigger
+              value="foryou"
+              className="data-[state=active]:bg-primary data-[state=active]:text-white transition"
             >
-              Todos
-            </Badge>
-            {categories.map((category) => (
-              <Badge
-                key={category.id}
-                variant={selectedCategory === category.id ? "default" : "outline"}
-                className="cursor-pointer whitespace-nowrap"
-                onClick={() => setSelectedCategory(category.id)}
-              >
-                {category.name}
-              </Badge>
-            ))}
-          </div>
-        </div>
+              For You
+            </TabsTrigger>
+            <TabsTrigger
+              value="featured"
+              className="data-[state=active]:bg-primary data-[state=active]:text-white transition"
+            >
+              Em Destaque
+            </TabsTrigger>
+          </TabsList>
 
-        {isLoading ? (
-          <div className="flex justify-center py-12">
-            <div className="text-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
-              <p className="text-muted-foreground">Carregando posts...</p>
+          {/* For You */}
+          <TabsContent value="foryou">
+            {interests.length === 0 ? (
+              <div className="text-center text-muted-foreground py-20">
+                💡 Escolha alguns interesses nas configurações para personalizar
+                o seu feed.
+              </div>
+            ) : posts.length === 0 && !isLoading ? (
+              <div className="text-center text-muted-foreground py-20">
+                Ainda não há posts nessas categorias. Tenta voltar mais tarde!
+              </div>
+            ) : (
+              <PostList
+                posts={posts}
+                isLoading={isLoading}
+                savedPosts={savedPosts}
+                toggleBookmark={toggleBookmark}
+                formatDate={formatDate}
+              />
+            )}
+          </TabsContent>
+
+          {/* Em Destaque */}
+          <TabsContent value="featured">
+            <div className="flex flex-wrap gap-2 mb-8 justify-center m-4">
+              <Badge
+                onClick={() => setSelectedCategory(null)}
+                className={`cursor-pointer ${
+                  !selectedCategory ? "bg-primary text-white" : ""
+                }`}
+              >
+                Todos
+              </Badge>
+              {categories.map((cat) => (
+                <Badge
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`cursor-pointer ${
+                    selectedCategory === cat.id
+                      ? "bg-primary text-white"
+                      : ""
+                  }`}
+                >
+                  {cat.name}
+                </Badge>
+              ))}
+            </div>
+
+            <PostList
+              posts={posts}
+              isLoading={isLoading}
+              savedPosts={savedPosts}
+              toggleBookmark={toggleBookmark}
+              formatDate={formatDate}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
+}
+
+/* 🧱 Subcomponente — lista de posts no estilo Medium */
+function PostList({
+  posts,
+  isLoading,
+  savedPosts,
+  toggleBookmark,
+  formatDate,
+}: {
+  posts: Post[]
+  isLoading: boolean
+  savedPosts: string[]
+  toggleBookmark: (articleId: string) => Promise<void>
+  formatDate: (dateString: string) => string
+}) {
+  if (isLoading)
+    return (
+      <div className="text-center text-muted-foreground py-10">
+        Carregando posts...
+      </div>
+    )
+
+  if (posts.length === 0)
+    return (
+      <div className="text-center text-muted-foreground py-10">
+        Nenhum post encontrado.
+      </div>
+    )
+
+  return (
+    <div className="flex flex-col divide-y divide-border">
+      {posts.map((post) => (
+        <Link
+          key={post.article_id}
+          href={`/article/${post.article_id}`}
+          className="group flex flex-col sm:flex-row justify-between gap-6 py-10 hover:bg-muted/10 transition rounded-2xl px-4 sm:px-6"
+        >
+          {/* Lado Esquerdo — Texto */}
+          <div className="flex flex-col justify-between flex-1 pr-4">
+            {/* Autor */}
+            <div className="flex items-center gap-2 mb-2">
+              <img
+                src={post.users?.[0]?.avatar_url || "/placeholder.svg"}
+                alt={post.users?.[0]?.name || "Autor"}
+                className="w-8 h-8 rounded-full object-cover"
+              />
+              <span className="font-medium text-sm text-foreground">
+                {post.users?.[0]?.name || "Autor desconhecido"}
+              </span>
+            </div>
+
+            {/* Título e resumo */}
+            <div>
+              <h3 className="text-2xl font-bold leading-snug mb-2 group-hover:text-primary transition-colors">
+                {post.title}
+              </h3>
+              <p className="text-muted-foreground text-base leading-relaxed line-clamp-2">
+                {post.summary}
+              </p>
+            </div>
+
+            {/* Rodapé */}
+            <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-4">
+                <span>{formatDate(post.created_at)}</span>
+                <div className="flex items-center gap-1">
+                  <Eye className="w-4 h-4" />
+                  <span>{post.views_count}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Heart className="w-4 h-4" />
+                  <span>{post.likes_count}</span>
+                </div>
+              </div>
+
+              {/* Botão Guardar */}
+              <button
+                onClick={async (e) => {
+                  e.preventDefault()
+                  await toggleBookmark(post.article_id)
+                }}
+                className={`flex items-center justify-center w-8 h-8 border rounded-full transition ${
+                  savedPosts.includes(post.article_id)
+                    ? "bg-primary text-white"
+                    : "hover:bg-primary/10"
+                }`}
+              >
+                <Bookmark
+                  className={`w-4 h-4 ${
+                    savedPosts.includes(post.article_id)
+                      ? "fill-white"
+                      : "text-muted-foreground"
+                  }`}
+                />
+              </button>
             </div>
           </div>
-        ) : posts.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Nenhum post encontrado nesta categoria.</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {posts.map((post) => (
-              <Link key={post.id} href={`/post/${post.id}`}>
-                <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer h-full">
-                  {post.cover_image && (
-                    <div className="aspect-video w-full overflow-hidden bg-muted">
-                      <img
-                        src={post.cover_image || "/placeholder.svg"}
-                        alt={post.title}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                      />
-                    </div>
-                  )}
-                  <div className="p-5">
-                    {post.category && (
-                      <Badge variant="secondary" className="mb-3">
-                        {post.category.name}
-                      </Badge>
-                    )}
-                    <h3 className="text-xl font-semibold mb-2 line-clamp-2">{post.title}</h3>
-                    <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{post.excerpt}</p>
 
-                    <div className="flex items-center justify-between text-sm text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{post.author.display_name}</span>
-                        <span>·</span>
-                        <span>{formatDate(post.created_at)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 mt-4 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Heart className="h-4 w-4" />
-                        <span>{post.likes_count}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <MessageCircle className="h-4 w-4" />
-                        <span>{post.comments_count}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Bookmark className="h-4 w-4" />
-                      </div>
-                    </div>
-                  </div>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
+          {/* Lado Direito — Imagem */}
+          {post.cover_url && (
+            <div className="w-full sm:w-48 h-32 sm:h-28 flex-shrink-0 overflow-hidden rounded-md bg-muted">
+              <img
+                src={post.cover_url}
+                alt={post.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+            </div>
+          )}
+        </Link>
+      ))}
     </div>
   )
 }
