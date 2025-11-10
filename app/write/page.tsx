@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2 } from "lucide-react"
+import { Loader2, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
@@ -32,6 +32,7 @@ export default function WritePage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
 
@@ -39,11 +40,10 @@ export default function WritePage() {
     loadCategories()
   }, [])
 
-  // Carrega categorias
+  // 🧠 Carregar categorias do Supabase
   const loadCategories = async () => {
     setIsLoading(true)
     try {
-      
       const { data, error } = await supabase
         .from("categories")
         .select("id, name")
@@ -59,30 +59,47 @@ export default function WritePage() {
     }
   }
 
-  const handleSaveDraft = async () => {
-    await handleSubmit(false)
+  // 🖼️ Upload da imagem de capa
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    setError(null)
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) throw new Error("Usuário não autenticado.")
+
+      const fileName = `${user.id}/${Date.now()}-${file.name}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("covers")
+        .upload(fileName, file)
+
+      if (uploadError) throw uploadError
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("covers").getPublicUrl(fileName)
+
+      setCoverImage(publicUrl)
+    } catch (error) {
+      console.error("Erro no upload da imagem:", error)
+      setError("Erro ao enviar a imagem.")
+    } finally {
+      setIsUploading(false)
+    }
   }
 
-  const handlePublish = async () => {
-    await handleSubmit(true)
-  }
-
-  //  Salvar ou publicar post
+  // 🧠 Submeter post (publicar ou guardar)
   const handleSubmit = async (publish: boolean) => {
-    if (!title.trim()) {
-      setError("O título é obrigatório.")
-      return
-    }
-
-    if (!categoryId) {
-      setError("Selecione uma categoria.")
-      return
-    }
-
-    if (!content.trim()) {
-      setError("O conteúdo é obrigatório.")
-      return
-    }
+    if (!title.trim()) return setError("O título é obrigatório.")
+    if (!categoryId) return setError("Selecione uma categoria.")
+    if (!content.trim()) return setError("O conteúdo é obrigatório.")
 
     setIsPublishing(true)
     setError(null)
@@ -95,16 +112,18 @@ export default function WritePage() {
       if (!user) throw new Error("Usuário não autenticado.")
 
       const { data, error } = await supabase
-        .from("posts")
+        .from("articles") 
         .insert([
           {
             title: title.trim(),
-            excerpt: excerpt.trim() || content.trim().substring(0, 200),
+            summary: excerpt.trim() || content.trim().substring(0, 200),
             content: content.trim(),
-            category_id: categoryId,
-            cover_image: coverImage || null,
-            author_id: user.id,
-            published: publish,
+            categories_id: categoryId, 
+            cover_url: coverImage || null, 
+            author_id: user.id, 
+            status: publish ? "published" : "draft", 
+            views_count: 0,
+            likes_count: 0,
           },
         ])
         .select()
@@ -112,13 +131,22 @@ export default function WritePage() {
 
       if (error) throw error
 
-      router.push(publish ? `/post/${data.id}` : "/profile")
+      // ✅ Redirecionar após publicar ou guardar
+      router.push(publish ? "/feed?tab=featured" : "/profile")
     } catch (error) {
       console.error("Erro ao salvar post:", error)
       setError("Erro ao salvar o post. Tente novamente.")
     } finally {
       setIsPublishing(false)
     }
+  }
+
+  const handleSaveDraft = async () => {
+    await handleSubmit(false)
+  }
+
+  const handlePublish = async () => {
+    await handleSubmit(true)
   }
 
   return (
@@ -153,7 +181,6 @@ export default function WritePage() {
               disabled={isPublishing}
             />
           </div>
-
           <div>
             <Label htmlFor="excerpt" className="text-base font-semibold">
               Subtítulo
@@ -167,7 +194,6 @@ export default function WritePage() {
               disabled={isPublishing}
             />
           </div>
-
           <div>
             <Label htmlFor="category" className="text-base font-semibold">
               Categoria *
@@ -189,37 +215,48 @@ export default function WritePage() {
               </SelectContent>
             </Select>
           </div>
-
           <div>
-            <Label htmlFor="coverImage" className="text-base font-semibold">
-              Imagem de capa
-            </Label>
-            <div className="mt-2 space-y-3">
-              <Input
-                id="coverImage"
-                type="url"
-                placeholder="URL da imagem de capa (opcional)"
-                value={coverImage}
-                onChange={(e) => setCoverImage(e.target.value)}
-                disabled={isPublishing}
+            <Label className="text-base font-semibold">Imagem de capa</Label>
+            <div className="mt-3 flex items-center gap-4">
+              <Button
+                variant="outline"
+                disabled={isUploading || isPublishing}
+                onClick={() => document.getElementById("fileInput")?.click()}
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-4 h-4 mr-2" /> Escolher ficheiro
+                  </>
+                )}
+              </Button>
+              <input
+                id="fileInput"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileUpload}
               />
-              {coverImage && (
-                <Card className="overflow-hidden">
-                  <div className="aspect-video w-full bg-muted flex items-center justify-center">
-                    <img
-                      src={coverImage || "/placeholder.svg"}
-                      alt="Preview"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        e.currentTarget.src = "/placeholder.svg?height=400&width=800"
-                      }}
-                    />
-                  </div>
-                </Card>
-              )}
             </div>
-          </div>
 
+            {coverImage && (
+              <Card className="overflow-hidden mt-4">
+                <div className="aspect-video w-full bg-muted flex items-center justify-center">
+                  <img
+                    src={coverImage}
+                    alt="Preview"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.src = "/placeholder.svg"
+                    }}
+                  />
+                </div>
+              </Card>
+            )}
+          </div>
           <div>
             <Label htmlFor="content" className="text-base font-semibold">
               Conteúdo do artigo *
@@ -236,7 +273,6 @@ export default function WritePage() {
               {content.length} caracteres
             </p>
           </div>
-
           <div className="flex items-center gap-3 pt-4 border-t">
             <Button
               onClick={handlePublish}
