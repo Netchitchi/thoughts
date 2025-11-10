@@ -75,6 +75,23 @@ export default function ArticleDetailPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
 
 
+  const registerRead = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { error } = await supabase
+      .from("user_reads")
+      .insert({
+        user_id: user.id,
+        article_id: articleId,
+        read_at: new Date().toISOString(),
+      });
+
+    if (error) {
+      console.error("Erro ao registrar leitura:", error);
+    }
+  };
+
   useEffect(() => {
     if (articleId) {
       loadArticle()
@@ -82,6 +99,7 @@ export default function ArticleDetailPage() {
       loadSuggested()
       checkUserInteractions()
       incrementViews()
+      registerRead(); // <-- Adicionado aqui
     }
   }, [articleId])
 
@@ -173,38 +191,36 @@ export default function ArticleDetailPage() {
 
   const loadSuggested = async () => {
     try {
-      const { data, error } = await supabase
-        .from("articles")
-        .select(`
-          article_id,
-          title,
-          summary,
-          cover_url,
-          author:users(name)
-        `)
-        .eq("status", "published")
-        .neq("article_id", articleId)
-        .limit(3)
-
-      if (error) throw error
-
-      const mapped: SuggestedArticle[] =
-        data?.map((row: any) => {
-          const author = pickOne(row.author)
-          return {
-            article_id: row.article_id,
-            title: row.title,
-            summary: row.summary,
-            cover_url: row.cover_url ?? null,
-            author: { name: author?.name ?? "Autor" },
-          }
-        }) ?? []
-
-      setSuggested(mapped)
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/recommendArticles`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            user_id: session.user.id,
+            article_id: params.id,
+          }),
+        }
+      );
+      if (!response.ok) {
+        console.error("Erro:", await response.text());
+        return;
+      }
+      const data = await response.json();
+      setSuggested(data);
     } catch (error) {
-      console.error("Erro ao carregar sugestões:", error)
+      console.error("Erro ao carregar recomendações (CSP):", error);
     }
   }
+
+
 
   const checkUserInteractions = async () => {
     try {
