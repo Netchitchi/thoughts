@@ -176,7 +176,7 @@ export default function ProfilePage() {
   }
 
   const PostCard = ({ post }: { post: Post }) => (
-  <Link href={`/post/${post.article_id}`}>
+  <Link href={`/article/${post.article_id}`}>
     <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer h-full">
       <div className="p-5">
         {post.categories && post.categories.length > 0 && (
