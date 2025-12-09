@@ -71,7 +71,13 @@ export function AuthenticatedNavbar() {
             <span className="text-xl font-semibold tracking-tight">Thoughts</span>
           </Link>
 
+          {/* Added Comunidade text */}
+          
+
           <div className="flex items-center gap-3">
+            <Link href="/community" className="text-sm font-medium hover:underline">
+              Comunidade
+            </Link>
             <Link href="/write">
               <Button size="sm">Escrever</Button>
             </Link>
