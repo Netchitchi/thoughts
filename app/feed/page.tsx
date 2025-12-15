@@ -8,11 +8,9 @@ import { supabase } from "@/packages/supabase-client/src/client"
 import { AuthenticatedNavbar } from "@/components/meusComponetes/authenticatednavbar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Eye, Heart, Bookmark } from "lucide-react"
+import { Eye, Heart, Bookmark, Image as ImageIcon } from "lucide-react"
 
-/* ============================= */
 /*           TYPES               */
-/* ============================= */
 
 interface Category {
   id: string
@@ -69,12 +67,12 @@ export default function FeedPage() {
     fetchUserInterests()
   }, [])
 
-  /* ----------- Atualiza posts quando filtros mudam ------------ */
+  /* Atualiza posts quando filtros mudam */
   useEffect(() => {
     fetchPosts()
   }, [selectedCategory, activeTab, interests])
 
-  /* ----------- REFRESH QUANDO O USER VOLTA AO FEED ------------ */
+  /*  REFRESH QUANDO O USER VOLTA AO FEED */
   useEffect(() => {
     const handler = () => {
       if (document.visibilityState === "visible") {
@@ -88,7 +86,7 @@ export default function FeedPage() {
   }, [])
 
   
-  /*         FETCH FUNCTIONS       */
+  /*Fetch function */
 
   const fetchCategories = async () => {
     const { data, error } = await supabase.from("categories").select("id, name").order("name")
@@ -189,7 +187,7 @@ export default function FeedPage() {
   }
 
  
-  /*       TOGGLE BOOKMARK         */
+  /* toogle bookmark */
 
   const toggleBookmark = async (articleId: string) => {
     const {
@@ -209,51 +207,53 @@ export default function FeedPage() {
   }
 
 
-  /*         LIKE NO FEED          */
+  /*  Like no feed */
 
-  const toggleLikeOnFeed = async (articleId: string) => {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
+const toggleLikeOnFeed = async (articleId: string) => {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
-    if (!user) return alert("Precisas de iniciar sessão para deixar like.")
-
-    const alreadyLiked = likedPosts.includes(articleId)
-    const post = posts.find((p) => p.article_id === articleId)
-    if (!post) return
-
-    if (alreadyLiked) {
-      await supabase.from("article_likes").delete().eq("article_id", articleId).eq("user_id", user.id)
-
-      await supabase
-        .from("articles")
-        .update({ likes_count: Math.max(post.likes_count - 1, 0) })
-        .eq("article_id", articleId)
-
-      setLikedPosts(likedPosts.filter((id) => id !== articleId))
-      setPosts((prev) =>
-        prev.map((p) => (p.article_id === articleId ? { ...p, likes_count: p.likes_count - 1 } : p))
-      )
-    } else {
-      await supabase.from("article_likes").insert({ article_id: articleId, user_id: user.id })
-
-      await supabase
-        .from("articles")
-        .update({ likes_count: post.likes_count + 1 })
-        .eq("article_id", articleId)
-
-      setLikedPosts([...likedPosts, articleId])
-      setPosts((prev) =>
-        prev.map((p) => (p.article_id === articleId ? { ...p, likes_count: p.likes_count + 1 } : p))
-      )
-    }
+  if (!user) {
+    alert("Precisas de iniciar sessão para deixar like.")
+    return
   }
+
+  const alreadyLiked = likedPosts.includes(articleId)
+
+  try {
+    if (alreadyLiked) {
+      //  remover like
+      await supabase
+        .from("article_likes")
+        .delete()
+        .eq("article_id", articleId)
+        .eq("user_id", user.id)
+    } else {
+      //  inserir like
+      await supabase
+        .from("article_likes")
+        .insert({
+          article_id: articleId,
+          user_id: user.id,
+        })
+    }
+
+    // 🔄 sincronizar estado (triggers já atualizaram likes_count)
+    await fetchPosts()
+    await fetchUserLikes()
+
+  } catch (error) {
+    console.error("Erro ao alternar like:", error)
+  }
+}
+
+
 
   const formatDate = (date: string) =>
     new Date(date).toLocaleDateString("pt-PT", { day: "numeric", month: "short" })
 
 
-  /*             RENDER            */
   
   return (
     <div className="min-h-screen bg-background">
@@ -349,7 +349,7 @@ function PostList({
     return <div className="py-10 text-center text-muted-foreground">Nenhum post encontrado.</div>
 
   return (
-    <div className="flex flex-col divide-y divide-border">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
       {posts.map((post) => {
         const isSaved = savedPosts.includes(post.article_id)
         const isLiked = likedPosts.includes(post.article_id)
@@ -358,12 +358,25 @@ function PostList({
           <Link
             key={post.article_id}
             href={`/article/${post.article_id}`}
-            className="group flex flex-col sm:flex-row justify-between gap-6 py-10 hover:bg-muted/10 transition rounded-2xl px-4 sm:px-6"
+            className="group flex flex-col bg-card rounded-xl overflow-hidden border shadow-sm hover:shadow-lg transition"
           >
-            {/* Texto */}
-            <div className="flex flex-col justify-between flex-1 pr-4">
+            {/* imagem */}
+            <div className="h-40 w-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/60 overflow-hidden">
+              {post.cover_url ? (
+                <img
+                  src={post.cover_url}
+                  alt={post.title}
+                  className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+              ) : (
+                <ImageIcon className="w-14 h-14 text-muted-foreground/40" />
+              )}
+            </div>
+
+            {/* Conteúdo */}
+            <div className="p-4 flex flex-col flex-grow">
               {/* Autor */}
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-3">
                 <img
                   src={post.users[0]?.avatar_url || "/placeholder.svg"}
                   className="w-8 h-8 rounded-full"
@@ -372,24 +385,27 @@ function PostList({
               </div>
 
               {/* Título */}
-              <div>
-                <h3 className="text-2xl font-bold mb-2 group-hover:text-primary transition">
-                  {post.title}
-                </h3>
-                <p className="text-muted-foreground line-clamp-2">{post.summary}</p>
-              </div>
+              <h3 className="text-lg font-bold mb-2 group-hover:text-primary transition">
+                {post.title}
+              </h3>
+
+              {/* Resumo */}
+              <p className="text-muted-foreground text-sm line-clamp-3 mb-4">
+                {post.summary}
+              </p>
 
               {/* Rodapé */}
-              <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-                <div className="flex items-center gap-4">
-                  <span>{formatDate(post.created_at)}</span>
+              <div className="mt-auto flex items-center justify-between text-sm text-muted-foreground pt-4 border-t">
+                <span>{formatDate(post.created_at)}</span>
 
+                <div className="flex items-center gap-3">
+                  {/* Views */}
                   <div className="flex items-center gap-1">
                     <Eye className="w-4 h-4" />
                     <span>{post.views_count}</span>
                   </div>
 
-                  {/* LIKE NO FEED */}
+                  {/* Like */}
                   <button
                     onClick={async (e) => {
                       e.preventDefault()
@@ -398,36 +414,30 @@ function PostList({
                     }}
                     className="flex items-center gap-1 hover:text-primary"
                   >
-                    <Heart className={`w-4 h-4 ${isLiked ? "fill-red-500 text-red-500" : ""}`} />
+                    <Heart
+                      className={`w-4 h-4 ${
+                        isLiked ? "fill-red-500 text-red-500" : ""
+                      }`}
+                    />
                     <span>{post.likes_count}</span>
                   </button>
-                </div>
 
-                {/* BOOKMARK */}
-                <button
-                  onClick={async (e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    await toggleBookmark(post.article_id)
-                  }}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center border ${
-                    isSaved ? "bg-primary text-white" : "hover:bg-primary/10"
-                  }`}
-                >
-                  <Bookmark className={`w-4 h-4 ${isSaved ? "fill-white" : ""}`} />
-                </button>
+                  {/* Bookmark */}
+                  <button
+                    onClick={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      await toggleBookmark(post.article_id)
+                    }}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center border ${
+                      isSaved ? "bg-primary text-white" : "hover:bg-primary/10"
+                    }`}
+                  >
+                    <Bookmark className={`w-4 h-4 ${isSaved ? "fill-white" : ""}`} />
+                  </button>
+                </div>
               </div>
             </div>
-
-            {/* Imagem */}
-            {post.cover_url && (
-              <div className="w-full sm:w-48 h-32 rounded-md overflow-hidden bg-muted">
-                <img
-                  src={post.cover_url}
-                  className="w-full h-full object-cover group-hover:scale-105 transition"
-                />
-              </div>
-            )}
           </Link>
         )
       })}

@@ -61,14 +61,40 @@ export default function ArticleDetailPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingContent, setEditingContent] = useState("")
 
-  /* ---------------- USER ATUAL ---------------- */
+  /* USER ATUAL */
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       setCurrentUser(user)
     })
   }, [])
 
-  /* -------- FIX: Recarregar quando voltar do feed -------- */
+ /*REGISTAR VISUALIZAÇÃO COM DELAY */
+useEffect(() => {
+  if (!articleId || !currentUser) return
+
+  const timeout = setTimeout(async () => {
+    const { error } = await supabase
+      .from("user_reads")
+      .upsert(
+        {
+          user_id: currentUser.id,
+          article_id: articleId,
+        },
+        {
+          onConflict: "user_id,article_id",
+        }
+      )
+
+    if (error) {
+      console.error("Erro ao registar visualização:", error)
+    }
+  }, 5000) // ⏱️ 5 segundos
+
+  return () => clearTimeout(timeout)
+}, [articleId, currentUser])
+
+
+  /*  FIX: Recarregar quando voltar do feed */
   useEffect(() => {
     const reloadOnReturn = () => {
       loadArticle()
@@ -84,7 +110,7 @@ export default function ArticleDetailPage() {
     }
   }, [])
 
-  /* ---------------- CARREGAR DADOS ---------------- */
+  /*  CARREGAR DADOS  */
   useEffect(() => {
     if (!articleId) return
     loadArticle()
@@ -94,7 +120,7 @@ export default function ArticleDetailPage() {
     else setHasLiked(false)
   }, [articleId, currentUser])
 
-  /* ----------- BUSCAR ARTIGO ----------- */
+  /* Buscar artigo*/
   const loadArticle = async () => {
     setIsLoading(true)
     const { data, error } = await supabase
@@ -136,7 +162,7 @@ export default function ArticleDetailPage() {
     setIsLoading(false)
   }
 
-  /* ----------- VER SE USER JÁ DEU LIKE ----------- */
+  /* ver se o utilizador já deu like */
   const checkIfUserLiked = async () => {
     if (!currentUser) return
 
@@ -150,50 +176,42 @@ export default function ArticleDetailPage() {
     setHasLiked(!!data)
   }
 
-  /* ----------- LIKE / UNLIKE ----------- */
-  const toggleLike = async () => {
-    if (!currentUser) {
-      alert("Precisas de iniciar sessão para deixar like.")
-      return
+  /* ----------- LIKE / UNLIKE  */
+
+const toggleLike = async () => {
+  if (!currentUser || !article) return
+
+  try {
+    if (hasLiked) {
+      // remover like
+      await supabase
+        .from("article_likes")
+        .delete()
+        .eq("article_id", article.article_id)
+        .eq("user_id", currentUser.id)
+    } else {
+
+      // inserir like
+      await supabase
+        .from("article_likes")
+        .insert({
+          article_id: article.article_id,
+          user_id: currentUser.id,
+        })
     }
-    if (!article) return
 
-    try {
-      if (hasLiked) {
-        await supabase
-          .from("article_likes")
-          .delete()
-          .eq("article_id", article.article_id)
-          .eq("user_id", currentUser.id)
+    //  sincronizar estado (triggers já atualizaram likes_count)
+    await loadArticle()
+    await checkIfUserLiked()
 
-        const newLikes = Math.max(article.likes_count - 1, 0)
-        await supabase
-          .from("articles")
-          .update({ likes_count: newLikes })
-          .eq("article_id", article.article_id)
-
-        setArticle({ ...article, likes_count: newLikes })
-        setHasLiked(false)
-      } else {
-        await supabase
-          .from("article_likes")
-          .insert({ article_id: article.article_id, user_id: currentUser.id })
-
-        const newLikes = article.likes_count + 1
-        await supabase
-          .from("articles")
-          .update({ likes_count: newLikes })
-          .eq("article_id", article.article_id)
-
-        setArticle({ ...article, likes_count: newLikes })
-        setHasLiked(true)
-      }
-    } catch (err) {
-      console.error("Erro ao alternar like:", err)
-    }
+  } catch (error) {
+    console.error("Erro ao alternar like:", error)
   }
+}
 
-  /* ----------- COMENTÁRIOS ----------- */
+
+
+  /* COMENTÁRIOS  */
   const loadComments = async () => {
     const { data, error } = await supabase
       .from("comments")
@@ -284,7 +302,7 @@ export default function ArticleDetailPage() {
     setEditingContent("")
   }
 
-  /* ----------- RENDER ----------- */
+
 
   if (isLoading || !article)
     return <div className="p-10 text-center">Carregando...</div>
@@ -300,7 +318,7 @@ export default function ArticleDetailPage() {
           <img src={article.cover_url} className="rounded-xl mb-8 w-full" />
         )}
 
-        {/* LIKE */}
+        {/* like */}
         <div className="flex items-center gap-3 mb-6">
           <Button
             onClick={toggleLike}
@@ -322,14 +340,14 @@ export default function ArticleDetailPage() {
           </span>
         </div>
 
-        {/* CONTEÚDO */}
+        {/* Conteúdo */}
         <div className="prose mb-12">
           {article.content.split("\n").map((line, i) => (
             <p key={i}>{line}</p>
           ))}
         </div>
 
-        {/* COMENTÁRIOS */}
+        {/* Comentários */}
         <section className="border-t pt-10">
           <h2 className="text-2xl font-semibold mb-6">
             Comentários ({comments.length})
