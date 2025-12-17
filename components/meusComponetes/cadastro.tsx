@@ -32,7 +32,7 @@ export default function Cadastro() {
     setIsLoading(true)
 
     if (confirmPass !== password) {
-      setError("As palvras passe são diferentes, faça a alteração");
+      setError("As palavras passe são diferentes, faça a alteração");
       setConfirmPass(" ")
       setPassword(" ")
       setIsLoading(false)
