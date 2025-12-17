@@ -21,7 +21,7 @@ interface Profile {
 }
 
 export function AuthenticatedNavbar() {
-  const [profile, setProfile] = useState<Users | null>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -54,6 +54,7 @@ export function AuthenticatedNavbar() {
   }
 
   const getInitials = (name: string) => {
+    if (!name) return "U"
     return name
       .split(" ")
       .map((n) => n[0])

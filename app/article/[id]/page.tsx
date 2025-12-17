@@ -44,7 +44,7 @@ interface RecommendedArticle {
   title: string
   summary: string
   cover_url: string | null
-  author: { name: string }
+  author: { name: string } | null
   likes_count: number
 }
 
@@ -103,9 +103,7 @@ export default function ArticleDetailPage() {
       }
     }, 5000) // ⏱️ 5 segundos
 
-    return () => clearTimeout(timeout)
-  }, [articleId, currentUser])
-    return () => clearTimeout(timeout)
+    return () => clearTimeout(timeout);
   }, [articleId, currentUser])
 
 
