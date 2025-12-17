@@ -27,12 +27,29 @@ export default function Cadastro() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
+  const validatePassword = (password: string) => {
+    if (password.length < 8) return "A palavra-passe deve ter pelo menos 8 caracteres.";
+    if (!/[A-Z]/.test(password)) return "A palavra-passe deve conter pelo menos uma letra maiúscula.";
+    if (!/[a-z]/.test(password)) return "A palavra-passe deve conter pelo menos uma letra minúscula.";
+    if (!/[0-9]/.test(password)) return "A palavra-passe deve conter pelo menos um número.";
+    if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) return "A palavra-passe deve conter pelo menos um caractere especial.";
+    return null;
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true)
+    setError(null)
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
+      setIsLoading(false);
+      return;
+    }
 
     if (confirmPass !== password) {
-      setError("As palvras passe são diferentes, faça a alteração");
+      setError("As palavras-passe não coincidem.");
       setConfirmPass(" ")
       setPassword(" ")
       setIsLoading(false)
@@ -131,6 +148,9 @@ export default function Cadastro() {
                 }}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                Mínimo de 8 caracteres, com maiúsculas, minúsculas, números e símbolos.
+              </p>
             </div>
 
             <div className="grid gap-2">
