@@ -15,7 +15,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { supabase } from "@/packages/supabase-client"
 
-interface Users {
+interface Profile {
   name: string
   avatar_url: string | null
 }

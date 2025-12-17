@@ -9,9 +9,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Loader2, X } from "lucide-react"
+import { Loader2, X, Upload } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 
 // Tipos
 interface UserProfile {
@@ -38,9 +38,11 @@ export default function SettingsPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [selectedInterests, setSelectedInterests] = useState<Set<string>>(new Set())
   const [isSaving, setIsSaving] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -133,7 +135,10 @@ export default function SettingsPage() {
         })
         .eq("user_id", user.id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        console.error("Erro ao atualizar perfil:", updateError)
+        throw new Error("Erro ao atualizar dados do perfil.")
+      }
 
       // Apaga os interesses anteriores
       const { error: deleteError } = await supabase
@@ -141,7 +146,10 @@ export default function SettingsPage() {
         .delete()
         .eq("user_id", user.id)
 
-      if (deleteError) throw deleteError
+      if (deleteError) {
+        console.error("Erro ao limpar interesses:", deleteError)
+        throw new Error("Erro ao atualizar interesses (limpeza).")
+      }
 
       // Insere os novos
       if (selectedInterests.size > 0) {
@@ -160,7 +168,7 @@ export default function SettingsPage() {
 
         if (insertError && Object.keys(insertError).length > 0) {
           console.error("Erro ao salvar interesses:", insertError)
-          throw insertError
+          throw new Error("Erro ao salvar novos interesses.")
         } else {
           console.log("Interesses salvos com sucesso!")
         }
@@ -168,16 +176,80 @@ export default function SettingsPage() {
 
       setSuccess("Perfil atualizado com sucesso!")
       setTimeout(() => router.push("/profile"), 1500)
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro ao salvar perfil:", err)
-      setError("Não foi possível salvar as alterações. Tente novamente.")
+      setError(err.message || "Não foi possível salvar as alterações. Tente novamente.")
     } finally {
       setIsSaving(false)
     }
   }
 
-  const getInitials = (n: string) =>
-    n.split(" ").map((x) => x[0]).join("").toUpperCase().slice(0, 2)
+  const getInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) {
+      return
+    }
+    const file = e.target.files[0]
+    
+    // Validar tamanho (max 50MB)
+    if (file.size > 50 * 1024 * 1024) {
+      setError("A imagem deve ter no máximo 50MB.")
+      return
+    }
+
+    // Validar tipo
+    if (!file.type.startsWith("image/")) {
+      setError("O ficheiro deve ser uma imagem.")
+      return
+    }
+
+    await uploadAvatar(file)
+  }
+
+  const uploadAvatar = async (file: File) => {
+    try {
+      if (!profile?.user_id) return
+      
+      setIsUploading(true)
+      setError(null)
+      
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${profile.user_id}-${Date.now()}.${fileExt}`
+      
+      // Upload para o bucket 'avatars'
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, {
+          upsert: true
+        })
+
+      if (uploadError) {
+        throw uploadError
+      }
+
+      // Obter URL pública
+      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName)
+      setAvatarUrl(data.publicUrl)
+      
+    } catch (err: any) {
+       console.error('Erro ao fazer upload da imagem:', err)
+       setError(err.message || 'Erro ao fazer upload da imagem.')
+    } finally {
+      setIsUploading(false)
+      // Limpar input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
 
   // 🔸 Estado de carregamento
   if (isLoading) {
@@ -238,18 +310,50 @@ export default function SettingsPage() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <Label htmlFor="avatarUrl">URL do avatar</Label>
-                  <Input
-                    id="avatarUrl"
-                    type="url"
-                    placeholder="https://exemplo.com/avatar.jpg"
-                    value={avatarUrl}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setAvatarUrl(e.target.value)
-                    }
-                    className="mt-2"
-                    disabled={isSaving}
-                  />
+                  <Label htmlFor="avatarUrl">Foto de Perfil</Label>
+                  <div className="flex gap-4 mt-2 items-center">
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      accept="image/*"
+                      onChange={handleFileSelect}
+                      disabled={isUploading || isSaving}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading || isSaving}
+                    >
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          A carregar...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="mr-2 h-4 w-4" />
+                          Carregar foto
+                        </>
+                      )}
+                    </Button>
+                    {avatarUrl && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-700"
+                        onClick={() => setAvatarUrl("")}
+                        disabled={isUploading || isSaving}
+                      >
+                        Remover
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Recomendado: Quadrado, max 50MB.
+                  </p>
                 </div>
               </div>
 

@@ -54,6 +54,8 @@ function pickOne<T>(value: MaybeArray<T>): T | null {
   return Array.isArray(value) ? value[0] ?? null : value
 }
 
+import { incrementViewAction } from "../actions"
+
 export default function ArticleDetailPage() {
   const params = useParams()
   const articleId = params.id as string
@@ -101,6 +103,8 @@ export default function ArticleDetailPage() {
       }
     }, 5000) // ⏱️ 5 segundos
 
+    return () => clearTimeout(timeout)
+  }, [articleId, currentUser])
     return () => clearTimeout(timeout)
   }, [articleId, currentUser])
 
