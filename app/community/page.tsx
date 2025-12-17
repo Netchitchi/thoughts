@@ -1,6 +1,6 @@
-import { createClient } from "@/packages/supabase-client/src/server";
-import { CommunityFeed } from "@/components/community/CommunityFeed";
-import { CommunityPost } from "@/packages/types/community";
+import { createClient } from "../../packages/supabase-client/src/server";
+import { CommunityFeed } from "../../components/community/CommunityFeed";
+import { CommunityPost } from "../../packages/types/community";
 
 export default async function CommunityPage() {
   const supabase = await createClient();
