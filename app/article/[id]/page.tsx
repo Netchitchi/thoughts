@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import { supabase } from "@/packages/supabase-client/src/client"
-
+import Link from "next/link"
 import { AuthenticatedNavbar } from "@/components/meusComponetes/authenticatednavbar"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Heart, HeartOff, Pencil, Trash2 } from "lucide-react"
+
 
 interface Article {
   article_id: string
@@ -38,6 +39,15 @@ interface Comment {
   }
 }
 
+interface RecommendedArticle {
+  article_id: string
+  title: string
+  summary: string
+  cover_url: string | null
+  author: { name: string }
+  likes_count: number
+}
+
 type MaybeArray<T> = T | T[] | null
 function pickOne<T>(value: MaybeArray<T>): T | null {
   if (!value) return null
@@ -53,7 +63,8 @@ export default function ArticleDetailPage() {
   const [newComment, setNewComment] = useState("")
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-
+  const [recommendations, setRecommendations] = useState<RecommendedArticle[]>([])
+  const [loadingRecs, setLoadingRecs] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [hasLiked, setHasLiked] = useState(false)
 
@@ -69,29 +80,29 @@ export default function ArticleDetailPage() {
   }, [])
 
  /*REGISTAR VISUALIZAÇÃO COM DELAY */
-useEffect(() => {
-  if (!articleId || !currentUser) return
+  useEffect(() => {
+    if (!articleId || !currentUser) return
 
-  const timeout = setTimeout(async () => {
-    const { error } = await supabase
-      .from("user_reads")
-      .upsert(
-        {
-          user_id: currentUser.id,
-          article_id: articleId,
-        },
-        {
-          onConflict: "user_id,article_id",
-        }
-      )
+    const timeout = setTimeout(async () => {
+      const { error } = await supabase
+        .from("user_reads")
+        .upsert(
+          {
+            user_id: currentUser.id,
+            article_id: articleId,
+          },
+          {
+            onConflict: "user_id,article_id",
+          }
+        )
 
-    if (error) {
-      console.error("Erro ao registar visualização:", error)
-    }
-  }, 5000) // ⏱️ 5 segundos
+      if (error) {
+        console.error("Erro ao registar visualização:", error)
+      }
+    }, 5000) // ⏱️ 5 segundos
 
-  return () => clearTimeout(timeout)
-}, [articleId, currentUser])
+    return () => clearTimeout(timeout)
+  }, [articleId, currentUser])
 
 
   /*  FIX: Recarregar quando voltar do feed */
@@ -116,9 +127,32 @@ useEffect(() => {
     loadArticle()
     loadComments()
 
-    if (currentUser) checkIfUserLiked()
-    else setHasLiked(false)
+    if (currentUser){
+      checkIfUserLiked()
+      loadRecommendations()
+    } else {
+      setHasLiked(false)
+    }
   }, [articleId, currentUser])
+
+  /* CARREGAR RECOMENDAÇÕES (CSP) */
+  const loadRecommendations = async () => {
+    if (!currentUser || !articleId) return
+    
+    setLoadingRecs(true)
+    
+    // A função 'invoke' envia automaticamente o token do utilizador atual
+    const { data, error } = await supabase.functions.invoke('recommendArticles', {
+      body: { article_id: articleId } // Enviamos o ID atual para excluí-lo e marcar como "lido" no contexto
+    })
+
+    if (error) {
+      console.error("Erro ao carregar recomendações:", error)
+    } else {
+      setRecommendations(data || [])
+    }
+    setLoadingRecs(false)
+  }
 
   /* Buscar artigo*/
   const loadArticle = async () => {
@@ -208,8 +242,6 @@ const toggleLike = async () => {
     console.error("Erro ao alternar like:", error)
   }
 }
-
-
 
   /* COMENTÁRIOS  */
   const loadComments = async () => {
@@ -346,6 +378,60 @@ const toggleLike = async () => {
             <p key={i}>{line}</p>
           ))}
         </div>
+
+        {/* --- SECÇÃO DE RECOMENDAÇÕES (IA / CSP) --- */}
+        {currentUser && (
+          <section className="my-12 border-t pt-8">
+            <h3 className="text-2xl font-bold mb-6">Recomendado para si</h3>
+            
+            {loadingRecs ? (
+              <p className="text-muted-foreground">A personalizar sugestões...</p>
+            ) : recommendations.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {recommendations.map((rec) => (
+                  <Link 
+                    href={`/article/${rec.article_id}`} 
+                    key={rec.article_id}
+                    className="group block border rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+                  >
+                    {rec.cover_url ? (
+                      <div className="h-40 overflow-hidden">
+                        <img 
+                          src={rec.cover_url} 
+                          alt={rec.title} 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-40 bg-gray-100 flex items-center justify-center text-gray-400">
+                        Sem imagem
+                      </div>
+                    )}
+                    
+                    <div className="p-4">
+                      <h4 className="font-semibold text-lg leading-tight mb-2 group-hover:text-primary">
+                        {rec.title}
+                      </h4>
+                      <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
+                        {rec.summary}
+                      </p>
+                      <div className="flex items-center justify-between text-xs text-gray-500">
+                        <span>{rec.author?.name || "Autor"}</span>
+                        <div className="flex items-center gap-1">
+                          <Heart className="w-3 h-3" /> {rec.likes_count}
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-muted-foreground">
+                Não encontrámos recomendações novas neste momento.
+              </p>
+            )}
+          </section>
+        )}
 
         {/* Comentários */}
         <section className="border-t pt-10">
