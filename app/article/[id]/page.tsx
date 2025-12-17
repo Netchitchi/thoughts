@@ -44,6 +44,8 @@ function pickOne<T>(value: MaybeArray<T>): T | null {
   return Array.isArray(value) ? value[0] ?? null : value
 }
 
+import { incrementViewAction } from "../actions"
+
 export default function ArticleDetailPage() {
   const params = useParams()
   const articleId = params.id as string
@@ -68,30 +70,33 @@ export default function ArticleDetailPage() {
     })
   }, [])
 
- /*REGISTAR VISUALIZAÇÃO COM DELAY */
-useEffect(() => {
-  if (!articleId || !currentUser) return
+  /*REGISTAR VISUALIZAÇÃO COM DELAY */
+  useEffect(() => {
+    if (!articleId) return
 
-  const timeout = setTimeout(async () => {
-    const { error } = await supabase
-      .from("user_reads")
-      .upsert(
-        {
-          user_id: currentUser.id,
-          article_id: articleId,
-        },
-        {
-          onConflict: "user_id,article_id",
-        }
-      )
+    const timeout = setTimeout(async () => {
+      // 1. Tentar registar leitura única se estiver logado (Histórico)
+      if (currentUser) {
+         await supabase
+          .from("user_reads")
+          .upsert(
+            {
+              user_id: currentUser.id,
+              article_id: articleId,
+            },
+            {
+              onConflict: "user_id,article_id",
+            }
+          )
+      }
 
-    if (error) {
-      console.error("Erro ao registar visualização:", error)
-    }
-  }, 5000) // ⏱️ 5 segundos
+      // 2. Incrementar contador via Server Action (Revalida cache)
+      await incrementViewAction(articleId);
+      
+    }, 2000) // ⏱️ 2 segundos (mais rápido para garantir que conta)
 
-  return () => clearTimeout(timeout)
-}, [articleId, currentUser])
+    return () => clearTimeout(timeout)
+  }, [articleId, currentUser])
 
 
   /*  FIX: Recarregar quando voltar do feed */

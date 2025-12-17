@@ -16,7 +16,7 @@ import { useEffect, useState } from "react"
 import { supabase } from "@/packages/supabase-client"
 
 interface Profile {
-  display_name: string
+  name: string
   avatar_url: string | null
 }
 
@@ -36,9 +36,9 @@ export function AuthenticatedNavbar() {
 
       if (user) {
         const { data } = await supabase
-          .from("profiles")
-          .select("display_name, avatar_url")
-          .eq("id", user.id)
+          .from("users")
+          .select("name, avatar_url")
+          .eq("user_id", user.id)
           .single()
 
         if (data) setProfile(data)
@@ -87,14 +87,14 @@ export function AuthenticatedNavbar() {
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={profile?.avatar_url || undefined} />
-                    <AvatarFallback>{profile ? getInitials(profile.display_name) : "U"}</AvatarFallback>
+                    <AvatarFallback>{profile ? getInitials(profile.name) : "U"}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
 
               <DropdownMenuContent align="end" className="w-56">
                 <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium">{profile?.display_name}</p>
+                  <p className="text-sm font-medium">{profile?.name}</p>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>

@@ -48,7 +48,7 @@ export function CommunitySidebar({ userGroups }: CommunitySidebarProps) {
   }, [groupId]);
 
   return (
-    <aside className="w-72 hidden md:flex flex-col gap-6 sticky top-8 h-[calc(100vh-4rem)] overflow-y-auto pr-2">
+    <aside className="w-72 hidden md:flex flex-col gap-6 sticky top-24 h-[calc(100vh-6rem)] overflow-y-auto pr-2">
       <h2 className="text-2xl font-semibold shrink-0">Grupos</h2>
 
       {/* Search */}
@@ -81,7 +81,7 @@ export function CommunitySidebar({ userGroups }: CommunitySidebarProps) {
            <div className="space-y-3">
              <div className="flex items-center gap-2 text-primary font-semibold">
                <TrendingUp className="w-4 h-4" />
-               <span className="text-sm">Discussões Populares</span>
+               <span className="text-sm">Discussões Recentes</span>
              </div>
              <div className="space-y-2">
                {popularPosts.length > 0 ? (

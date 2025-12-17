@@ -277,15 +277,28 @@ const toggleLikeOnFeed = async (articleId: string) => {
                 Escolhe alguns interesses para personalizar o feed.
               </div>
             ) : (
-              <PostList
-                posts={posts}
-                isLoading={isLoading}
-                savedPosts={savedPosts}
-                likedPosts={likedPosts}
-                toggleBookmark={toggleBookmark}
-                toggleLike={toggleLikeOnFeed}
-                formatDate={formatDate}
-              />
+              <>
+                <div className="flex flex-wrap gap-2 mb-6 justify-center">
+                   <p className="w-full text-center text-xs text-muted-foreground mb-2 uppercase tracking-wider font-medium">Os teus interesses</p>
+                   {categories
+                     .filter(cat => interests.includes(cat.id))
+                     .map(cat => (
+                       <Badge key={cat.id} variant="secondary" className="px-3 py-1 bg-primary/10 text-primary hover:bg-primary/20">
+                         {cat.name}
+                       </Badge>
+                     ))
+                   }
+                </div>
+                <PostList
+                  posts={posts}
+                  isLoading={isLoading}
+                  savedPosts={savedPosts}
+                  likedPosts={likedPosts}
+                  toggleBookmark={toggleBookmark}
+                  toggleLike={toggleLikeOnFeed}
+                  formatDate={formatDate}
+                />
+              </>
             )}
           </TabsContent>
 

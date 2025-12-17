@@ -4,6 +4,7 @@ import { Button } from "../ui/button";
 import { Card, CardContent } from "../ui/card";
 import { Textarea } from "../ui/textarea";
 import { createPost } from "@/app/community/actions";
+import { useFormStatus } from "react-dom";
 import {
   Select,
   SelectContent,
@@ -12,11 +13,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Label } from "../ui/label";
-import { MessageSquare, FileText, HelpCircle, Link as LinkIcon } from "lucide-react";
+import { MessageSquare, FileText, HelpCircle, Link as LinkIcon, Loader2 } from "lucide-react";
 
 interface Article {
   article_id: string;
   title: string;
+}
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          A publicar...
+        </>
+      ) : (
+        "Publicar"
+      )}
+    </Button>
+  );
 }
 
 export function CreatePostForm({ groupId, articles }: { groupId: string; articles: Article[] }) {
@@ -86,7 +104,7 @@ export function CreatePostForm({ groupId, articles }: { groupId: string; article
            </div>
 
            <div className="flex justify-end pt-2">
-             <Button type="submit">Publicar</Button>
+             <SubmitButton />
            </div>
         </form>
       </CardContent>

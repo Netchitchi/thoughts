@@ -1,5 +1,6 @@
 import { createClient } from "@/packages/supabase-client/src/server";
 import { CommunitySidebar } from "@/components/community/CommunitySidebar";
+import { AuthenticatedNavbar } from "@/components/meusComponetes/authenticatednavbar";
 import { redirect } from "next/navigation";
 import { Group } from "@/packages/types/community";
 
@@ -36,9 +37,12 @@ export default async function CommunityLayout({ children }: { children: React.Re
   const userGroups: Group[] = members?.map((m) => m.groups).filter(Boolean) || [];
 
   return (
-    <div className="flex w-full max-w-6xl mx-auto px-4 py-10 gap-10">
-      <CommunitySidebar userGroups={userGroups} />
-      {children}
+    <div className="min-h-screen bg-background">
+      <AuthenticatedNavbar />
+      <div className="flex w-full max-w-6xl mx-auto px-4 py-10 gap-10">
+        <CommunitySidebar userGroups={userGroups} />
+        {children}
+      </div>
     </div>
   );
 }
