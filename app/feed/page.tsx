@@ -8,7 +8,13 @@ import { supabase } from "@/packages/supabase-client/src/client"
 import { AuthenticatedNavbar } from "@/components/meusComponetes/authenticatednavbar"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Eye, Heart, Bookmark, Image as ImageIcon } from "lucide-react"
+import { Eye, Heart, Bookmark, Image as ImageIcon, MoreVertical, Edit, Trash } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 /*           TYPES               */
 
@@ -26,6 +32,7 @@ interface Post {
   likes_count: number
   cover_url: string | null
   users: {
+    user_id: string
     name: string
     avatar_url: string | null
   }[]
@@ -45,6 +52,7 @@ export default function FeedPage() {
 
   const [savedPosts, setSavedPosts] = useState<string[]>([])
   const [likedPosts, setLikedPosts] = useState<string[]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
 
   const [activeTab, setActiveTab] = useState<"foryou" | "featured">("foryou")
   const [interests, setInterests] = useState<string[]>([])
@@ -61,11 +69,17 @@ export default function FeedPage() {
 
   /* ----------- LOAD INICIAL ------------ */
   useEffect(() => {
+    checkUser()
     fetchCategories()
     fetchBookmarks()
     fetchUserLikes()
     fetchUserInterests()
   }, [])
+
+  const checkUser = async () => {
+    const { data: { user } } = await supabase.auth.getUser()
+    setCurrentUser(user)
+  }
 
   /* Atualiza posts quando filtros mudam */
   useEffect(() => {
@@ -143,7 +157,7 @@ export default function FeedPage() {
           views_count,
           likes_count,
           cover_url,
-          author:users!articles_author_id_fkey(name, avatar_url),
+          author:users!articles_author_id_fkey(user_id, name, avatar_url),
           category:categories(name, id)
         `)
 
@@ -176,13 +190,26 @@ export default function FeedPage() {
         views_count: post.views_count,
         likes_count: post.likes_count,
         cover_url: post.cover_url,
-        users: [{ name: post.author?.name, avatar_url: post.author?.avatar_url }],
+        users: [{ user_id: post.author?.user_id, name: post.author?.name, avatar_url: post.author?.avatar_url }],
         categories: post.category ? [{ name: post.category.name }] : [],
       }))
 
       setPosts(formatted)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleDeletePost = async (articleId: string) => {
+    if (!confirm("Tem a certeza que deseja apagar este artigo?")) return
+
+    const { error } = await supabase.from("articles").delete().eq("article_id", articleId)
+    
+    if (error) {
+      alert("Erro ao apagar artigo")
+      console.error(error)
+    } else {
+      setPosts(posts.filter(p => p.article_id !== articleId))
     }
   }
 
@@ -297,6 +324,8 @@ const toggleLikeOnFeed = async (articleId: string) => {
                   toggleBookmark={toggleBookmark}
                   toggleLike={toggleLikeOnFeed}
                   formatDate={formatDate}
+                  currentUser={currentUser}
+                  onDelete={handleDeletePost}
                 />
               </>
             )}
@@ -329,6 +358,8 @@ const toggleLikeOnFeed = async (articleId: string) => {
               toggleBookmark={toggleBookmark}
               toggleLike={toggleLikeOnFeed}
               formatDate={formatDate}
+              currentUser={currentUser}
+              onDelete={handleDeletePost}
             />
           </TabsContent>
         </Tabs>
@@ -346,6 +377,8 @@ function PostList({
   toggleBookmark,
   toggleLike,
   formatDate,
+  currentUser,
+  onDelete,
 }: {
   posts: Post[]
   isLoading: boolean
@@ -354,6 +387,8 @@ function PostList({
   toggleBookmark: (id: string) => Promise<void>
   toggleLike: (id: string) => Promise<void>
   formatDate: (date: string) => string
+  currentUser: any
+  onDelete: (id: string) => Promise<void>
 }) {
   if (isLoading)
     return <div className="py-10 text-center text-muted-foreground">Carregando posts...</div>
@@ -366,12 +401,13 @@ function PostList({
       {posts.map((post) => {
         const isSaved = savedPosts.includes(post.article_id)
         const isLiked = likedPosts.includes(post.article_id)
+        const isOwner = currentUser?.id === post.users[0]?.user_id
 
         return (
+          <div key={post.article_id} className="relative group flex flex-col h-full">
           <Link
-            key={post.article_id}
             href={`/article/${post.article_id}`}
-            className="group flex flex-col bg-card rounded-xl overflow-hidden border shadow-sm hover:shadow-lg transition"
+            className="flex flex-col bg-card rounded-xl overflow-hidden border shadow-sm hover:shadow-lg transition h-full"
           >
             {/* imagem */}
             <div className="h-40 w-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/60 overflow-hidden">
@@ -452,6 +488,32 @@ function PostList({
               </div>
             </div>
           </Link>
+
+          {isOwner && (
+            <div className="absolute top-2 right-2 z-10">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="p-1 bg-background/80 backdrop-blur-sm rounded-full hover:bg-background shadow-sm border opacity-0 group-hover:opacity-100 transition-opacity">
+                    <MoreVertical className="w-5 h-5 text-foreground" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem asChild>
+                    <Link href={`/write?id=${post.article_id}`} className="flex items-center gap-2 cursor-pointer">
+                      <Edit className="w-4 h-4" /> Editar
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem 
+                    onClick={() => onDelete(post.article_id)}
+                    className="flex items-center gap-2 text-destructive cursor-pointer"
+                  >
+                    <Trash className="w-4 h-4" /> Apagar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )}
+        </div>
         )
       })}
     </div>
