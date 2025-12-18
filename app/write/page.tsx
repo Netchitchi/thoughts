@@ -15,15 +15,15 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Loader2, Upload } from "lucide-react"
-import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useEffect, useState, Suspense } from "react"
 
 interface Category {
   id: string
   name: string
 }
 
-export default function WritePage() {
+function WritePageContent() {
   const [title, setTitle] = useState("")
   const [excerpt, setExcerpt] = useState("")
   const [content, setContent] = useState("")
@@ -34,11 +34,43 @@ export default function WritePage() {
   const [isPublishing, setIsPublishing] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const articleId = searchParams.get("id")
 
   useEffect(() => {
     loadCategories()
-  }, [])
+    if (articleId) loadArticle()
+  }, [articleId])
+
+  // Carregar artigo para edição
+  const loadArticle = async () => {
+    if (!articleId) return
+    setIsLoading(true)
+    
+    const { data, error } = await supabase
+      .from("articles")
+      .select("*")
+      .eq("article_id", articleId)
+      .single()
+
+    if (error) {
+      console.error(error)
+      setError("Erro ao carregar artigo para edição")
+    } else if (data) {
+      setTitle(data.title)
+      setExcerpt(data.summary)
+      setContent(data.content)
+      setCoverImage(data.cover_url || "")
+      // Precisamos encontrar a categoria. O artigo tem categories_id ou category_id?
+      // No schema original (ver feed/page.tsx) parecia ter relation category:categories(name).
+      // Mas no insert deve usar um ID. Vou assumir que a coluna na tabela articles é categories_id ou category_id.
+      // O feed usa query.in("categories_id", ...). Então deve ser categories_id.
+      setCategoryId(data.categories_id || "")
+    }
+    setIsLoading(false)
+  }
 
   // 🧠 Carregar categorias do Supabase
   const loadCategories = async () => {
@@ -109,175 +141,65 @@ export default function WritePage() {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (!user) throw new Error("Usuário não autenticado.")
+    if (!user) throw new Error("Usuário não autenticado.")
 
-      const { data, error } = await supabase
-        .from("articles") 
-        .insert([
-          {
-            title: title.trim(),
-            summary: excerpt.trim() || content.trim().substring(0, 200),
-            content: content.trim(),
-            categories_id: categoryId, 
-            cover_url: coverImage || null, 
-            author_id: user.id, 
-            status: publish ? "published" : "draft", 
-            views_count: 0,
-            likes_count: 0,
-          },
-        ])
-        .select()
-        .single()
-
-      if (error) throw error
-
-      // ✅ Redirecionar após publicar ou guardar
-      router.push(publish ? "/feed?tab=featured" : "/profile")
-    } catch (error) {
-      console.error("Erro ao salvar post:", error)
-      setError("Erro ao salvar o post. Tente novamente.")
-    } finally {
-      setIsPublishing(false)
+    const payload = {
+      title,
+      summary: excerpt,
+      content,
+      categories_id: categoryId, // Assumindo que o nome da coluna é categories_id
+      cover_url: coverImage,
+      author_id: user.id,
+      published: publish,
     }
-  }
 
-  const handleSaveDraft = async () => {
-    await handleSubmit(false)
-  }
+    let error;
 
-  const handlePublish = async () => {
-    await handleSubmit(true)
+    if (articleId) {
+      // Update
+      const res = await supabase
+        .from("articles")
+        .update(payload)
+        .eq("article_id", articleId)
+      error = res.error
+    } else {
+      // Insert
+      const res = await supabase
+        .from("articles")
+        .insert(payload)
+      error = res.error
+    }
+
+    if (error) throw error
+
+    router.push("/feed")
+    router.refresh()
+  } catch (error: any) {
+    console.error("Erro ao salvar:", error)
+    setError(error.message || "Erro ao salvar o artigo.")
+  } finally {
+    setIsPublishing(false)
   }
+}
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-20">
       <AuthenticatedNavbar />
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-4xl">
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold mb-2">Escrever novo post</h1>
-          <p className="text-muted-foreground">
-            Partilhe as suas ideias com a comunidade
-          </p>
-        </div>
-
-        {error && (
-          <div className="mb-6 rounded-lg bg-destructive/10 p-4 text-sm text-destructive">
-            {error}
-          </div>
-        )}
-
-        <div className="space-y-6">
-          <div>
-            <Label htmlFor="title" className="text-base font-semibold">
-              Título *
-            </Label>
-            <Input
-              id="title"
-              placeholder="Um título cativante para o seu artigo..."
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="mt-2 text-lg h-12"
+      
+      <main className="container mx-auto max-w-4xl px-4 py-8">
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-3xl font-bold">{articleId ? "Editar Artigo" : "Novo Artigo"}</h1>
+          <div className="flex gap-3">
+            <Button 
+              variant="outline" 
+              onClick={() => handleSubmit(false)}
               disabled={isPublishing}
-            />
-          </div>
-          <div>
-            <Label htmlFor="excerpt" className="text-base font-semibold">
-              Subtítulo
-            </Label>
-            <Input
-              id="excerpt"
-              placeholder="Um breve resumo do seu artigo (opcional)"
-              value={excerpt}
-              onChange={(e) => setExcerpt(e.target.value)}
-              className="mt-2"
-              disabled={isPublishing}
-            />
-          </div>
-          <div>
-            <Label htmlFor="category" className="text-base font-semibold">
-              Categoria *
-            </Label>
-            <Select
-              value={categoryId}
-              onValueChange={setCategoryId}
-              disabled={isPublishing || isLoading}
             >
-              <SelectTrigger className="mt-2">
-                <SelectValue placeholder="Selecione uma categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-base font-semibold">Imagem de capa</Label>
-            <div className="mt-3 flex items-center gap-4">
-              <Button
-                variant="outline"
-                disabled={isUploading || isPublishing}
-                onClick={() => document.getElementById("fileInput")?.click()}
-              >
-                {isUploading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Enviando...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-4 h-4 mr-2" /> Escolher ficheiro
-                  </>
-                )}
-              </Button>
-              <input
-                id="fileInput"
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileUpload}
-              />
-            </div>
-
-            {coverImage && (
-              <Card className="overflow-hidden mt-4">
-                <div className="aspect-video w-full bg-muted flex items-center justify-center">
-                  <img
-                    src={coverImage}
-                    alt="Preview"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.src = "/placeholder.svg"
-                    }}
-                  />
-                </div>
-              </Card>
-            )}
-          </div>
-          <div>
-            <Label htmlFor="content" className="text-base font-semibold">
-              Conteúdo do artigo *
-            </Label>
-            <Textarea
-              id="content"
-              placeholder="Escreva o seu artigo aqui..."
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="mt-2 min-h-[400px] text-base leading-relaxed"
+              Salvar Rascunho
+            </Button>
+            <Button 
+              onClick={() => handleSubmit(true)}
               disabled={isPublishing}
-            />
-            <p className="text-sm text-muted-foreground mt-2">
-              {content.length} caracteres
-            </p>
-          </div>
-          <div className="flex items-center gap-3 pt-4 border-t">
-            <Button
-              onClick={handlePublish}
-              disabled={isPublishing}
-              className="min-w-[120px]"
             >
               {isPublishing ? (
                 <>
@@ -288,25 +210,107 @@ export default function WritePage() {
                 "Publicar"
               )}
             </Button>
-
-            <Button
-              variant="outline"
-              onClick={handleSaveDraft}
-              disabled={isPublishing}
-            >
-              Guardar rascunho
-            </Button>
-
-            <Button
-              variant="ghost"
-              onClick={() => router.back()}
-              disabled={isPublishing}
-            >
-              Cancelar
-            </Button>
           </div>
         </div>
-      </div>
+
+        {error && (
+          <div className="bg-destructive/15 text-destructive px-4 py-3 rounded-md mb-6">
+            {error}
+          </div>
+        )}
+
+        <div className="grid gap-8">
+          {/* Capa */}
+          <Card className="p-6">
+            <Label className="mb-4 block">Capa do Artigo</Label>
+            
+            <div className="flex items-center gap-6">
+              <div className="relative w-40 h-24 bg-muted rounded-md overflow-hidden flex items-center justify-center border border-dashed border-muted-foreground/50">
+                {coverImage ? (
+                  <img src={coverImage} className="w-full h-full object-cover" />
+                ) : (
+                  <Upload className="h-8 w-8 text-muted-foreground/50" />
+                )}
+              </div>
+              
+              <div className="flex-1">
+                <Input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                />
+                <p className="text-sm text-muted-foreground mt-2">
+                  Recomendado: 1200x630px (PNG ou JPG)
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Detalhes */}
+          <Card className="p-6 space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="title">Título</Label>
+              <Input
+                id="title"
+                placeholder="Um título cativante..."
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="text-lg font-medium"
+              />
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Categoria</Label>
+                <Select value={categoryId} onValueChange={setCategoryId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione uma categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="excerpt">Resumo</Label>
+              <Textarea
+                id="excerpt"
+                placeholder="Uma breve descrição do que se trata o artigo..."
+                value={excerpt}
+                onChange={(e) => setExcerpt(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </Card>
+
+          {/* Conteúdo */}
+          <Card className="p-6 space-y-2">
+            <Label htmlFor="content">Conteúdo</Label>
+            <Textarea
+              id="content"
+              placeholder="Escreva a sua história aqui..."
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              className="min-h-[400px] font-mono text-base"
+            />
+          </Card>
+        </div>
+      </main>
     </div>
+  )
+}
+
+export default function WritePage() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <WritePageContent />
+    </Suspense>
   )
 }
